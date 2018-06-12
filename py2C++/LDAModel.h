@@ -56,26 +56,59 @@ namespace cirrus{
           *
           */
         void update(int thread_idx);
+        /**
+          * LDA loglikelihood method
+          *
+          * Compute loglikelihood based on
+          * 1) global statistic
+          * 2) local ndts of all the groups
+          *
+          */
         double loglikelihood();
 
       // private:
 
+      /**
+        * K_: number of topics
+        * V_: number of words
+        * D_: number of documents
+        */
         int K_, V_, D_;
+
         int nworkers_;
         double alpha, eta;
 
         std::vector<std::string> vocabs;
 
-        // Each entry of the following
+        /**
+          * Given a group index i,
+          *
+          * the related local statistics are:
+          * 1) ts[i]: the assigned topics for each words in the given group
+          * 2) ds[i]: the document indices for ...
+          *           (with which we know which row of ndt to slice)
+          * 3) ws[i]: the global word indices for ...
+          *           (with which we know which row of nvt to slice)
+          * 4) nvts[i]: the word-topic-count statistic of the given group
+          * 5) ndts[i]: the document-topic-count statistic of the given group
+          * 6) nts[i]: the topic-count statistic of the given group
+          * 7) l2gs[i]: with which we find the local word index of the given group
+          *             using global word index
+          *             (TODO should be g2ls)
+          * 8) change_vts[i]: the change of nvts[i] from the sampling
+          */
         std::vector<std::vector<int>> ts, ds, ws;
         std::vector<std::vector<std::vector<int>>> nvts, ndts;
         std::vector<std::vector<int>> nts;
         std::vector<std::map<int, int>> l2gs;
-
-        std::vector<std::vector<int>> global_nvt;
-
-        // std::vector<std::map<std::pair<int, int>, int>> change_vts;
         std::vector<std::vector<std::pair<std::pair<int, int>, int> > > change_vts;
+
+        /**
+          *
+          * the global word-topic-count statistic
+          *
+          */
+        std::vector<std::vector<int>> global_nvt;
 
         void prepare_thread(LDADataset& dataset,
                       std::mutex& dataset_lock,
