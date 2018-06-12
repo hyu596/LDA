@@ -103,12 +103,16 @@ namespace cirrus{
         std::vector<std::map<int, int>> l2gs;
         std::vector<std::vector<std::pair<std::pair<int, int>, int> > > change_vts;
 
+        std::vector<std::vector<int>> change_nts;
+
         /**
           *
           * the global word-topic-count statistic
           *
           */
         std::vector<std::vector<int>> global_nvt;
+
+        std::vector<int> global_nt;
 
         void prepare_thread(LDADataset& dataset,
                       std::mutex& dataset_lock,
@@ -123,7 +127,8 @@ namespace cirrus{
                       // std::map<std::pair<int, int>, int>& change_vt,
                       TopicsGenerator& generator,
                       std::mutex& generator_lock,
-                      std::mutex& nvt_lock);
+                      std::mutex& nvt_lock,
+                      std::mutex& nt_lock);
 
         void prepare_partial_docs(const std::vector<std::vector<std::pair<int, int>>>& docs,
                       std::vector<int>& t,
@@ -137,7 +142,8 @@ namespace cirrus{
                       // std::map<std::pair<int, int>, int>& change_vt,
                       TopicsGenerator& generator,
                       std::mutex& generator_lock,
-                      std::mutex& nvt_lock
+                      std::mutex& nvt_lock,
+                      std::mutex& nt_lock
                     );
 
         void sample_thread(std::vector<int>& t,
@@ -147,7 +153,8 @@ namespace cirrus{
                         std::vector<int>& nt,
                         std::vector<std::vector<int>>& nvt,
                         std::vector<std::vector<int>>& ndt,
-                        std::vector<std::pair<std::pair<int, int>, int> >& change_vt
+                        std::vector<std::pair<std::pair<int, int>, int> >& change_vt,
+                        std::vector<int>& change_nt
                         // std::map<std::pair<int, int>, int>& change_vt
                       );
     };

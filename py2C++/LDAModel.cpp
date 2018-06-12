@@ -33,8 +33,14 @@ namespace cirrus{
     ndts.resize(nworkers_);
     change_vts.resize(nworkers_);
 
+    change_nts.resize(nworkers_);
+    for(int i=0; i<nworkers_; i++){
+      change_nts[i].resize(K_);
+    }
+    global_nt.resize(K_);
+
     TopicsGenerator generator(K_);
-    std::mutex dataset_lock, generator_lock, nvt_lock;
+    std::mutex dataset_lock, generator_lock, nvt_lock, nt_lock;
     std::vector<std::shared_ptr<std::thread>> threads;
     for(int i = 0; i < nworkers_; ++i){
       nts[i].resize(K_);
@@ -47,13 +53,12 @@ namespace cirrus{
           std::placeholders::_7, std::placeholders::_8,
           std::placeholders::_9, std::placeholders::_10,
           std::placeholders::_11, std::placeholders::_12,
-          std::placeholders::_13),
+          std::placeholders::_13, std::placeholders::_14),
           std::ref(dataset), std::ref(dataset_lock),
           std::ref(ts[i]), std::ref(ds[i]), std::ref(ws[i]),
           std::ref(nts[i]), std::ref(l2gs[i]),
           std::ref(nvts[i]), std::ref(ndts[i]), std::ref(change_vts[i]),
-          std::ref(generator), std::ref(generator_lock), std::ref(nvt_lock)
-        )
+          std::ref(generator), std::ref(generator_lock), std::ref(nvt_lock), std::ref(nt_lock))
       );
     }
 
@@ -78,7 +83,8 @@ namespace cirrus{
                 std::vector<std::pair<std::pair<int, int>, int> >& change_vt,
                 TopicsGenerator& generator,
                 std::mutex& generator_lock,
-                std::mutex& nvt_lock
+                std::mutex& nvt_lock,
+                std::mutex& nt_lock
               ){
 
     std::vector<std::vector<std::pair<int, int>>> docs;
@@ -95,7 +101,7 @@ namespace cirrus{
       prepare_partial_docs(docs, std::ref(t), std::ref(d),
                 std::ref(w), std::ref(nt), std::ref(l2g),
                 std::ref(nvt), std::ref(ndt), std::ref(change_vt),
-                std::ref(generator), std::ref(generator_lock), std::ref(nvt_lock));
+                std::ref(generator), std::ref(generator_lock), std::ref(nvt_lock), std::ref(nt_lock));
 
     }
   }
@@ -112,7 +118,8 @@ namespace cirrus{
                 // std::map<std::pair<int, int>, int>& change_vt,
                 TopicsGenerator& generator,
                 std::mutex& generator_lock,
-                std::mutex& nvt_lock
+                std::mutex& nvt_lock,
+                std::mutex& nt_lock
               ){
     int temp;
     for(const auto& doc: docs){
@@ -142,6 +149,10 @@ namespace cirrus{
           nvt_lock.lock();
           global_nvt[gindex][top-1] ++;
           nvt_lock.unlock();
+
+          nt_lock.lock();
+          global_nt[top-1] ++;
+          nt_lock.unlock();
         }
       }
       ndt.push_back(ndt_row);
@@ -156,7 +167,7 @@ namespace cirrus{
     // change_vts[thread_idx] = std::map<std::pair<int, int>, int>();
     sample_thread(std::ref(ts[thread_idx]), std::ref(ds[thread_idx]), std::ref(ws[thread_idx]),
                   std::ref(l2gs[thread_idx]), std::ref(nts[thread_idx]), std::ref(nvts[thread_idx]),
-                  std::ref(ndts[thread_idx]), std::ref(change_vts[thread_idx]));
+                  std::ref(ndts[thread_idx]), std::ref(change_vts[thread_idx]), std::ref(change_nts[thread_idx]));
   }
 
   void LDAModel::sample_thread(std::vector<int>& t,
@@ -166,7 +177,8 @@ namespace cirrus{
                   std::vector<int>& nt,
                   std::vector<std::vector<int>>& nvt,
                   std::vector<std::vector<int>>& ndt,
-                  std::vector<std::pair<std::pair<int, int>, int> >& change_vt){
+                  std::vector<std::pair<std::pair<int, int>, int> >& change_vt,
+                  std::vector<int>& change_nt){
                   // std::map<std::pair<int, int>, int>& change_vt){
 
     double* rate = new double[K_];
@@ -221,6 +233,9 @@ namespace cirrus{
       change_vt.push_back(std::make_pair(key_dec, -1));
       change_vt.push_back(std::make_pair(key_inc, 1));
 
+      change_nt[top] -= 1;
+      change_nt[new_top] += 1;
+
     }
     delete[] rate;
   }
@@ -230,6 +245,10 @@ namespace cirrus{
       auto c = change_vts[thread_idx].back();
       global_nvt[c.first.first][c.first.second] += c.second;
       change_vts[thread_idx].pop_back();
+    }
+    for(int i=0; i<K_; i++){
+      global_nt[i] += change_nts[thread_idx][i];
+      change_nts[thread_idx][i] = 0;
     }
   }
 
@@ -241,6 +260,9 @@ namespace cirrus{
       }
       it ++;
     }
+    for(int i=0; i<K_; i++){
+      nts[thread_idx][i] = global_nt[i];
+    }
   }
 
   double LDAModel::loglikelihood(){
@@ -249,12 +271,12 @@ namespace cirrus{
     double ll = 0;
     ll += K_ * lda_lgamma(eta * V_);
 
-    std::vector<int> nt_l(K_);
+    // std::vector<int> nt_l(K_);
     for(int i=0; i<nworkers_; i++){
       for(int j=0; j<ndts[i].size(); j++){
         int ndj = 0;
         for(int k=0; k<K_; k++){
-          nt_l[k] += ndts[i][j][k];
+          // nt_l[k] += ndts[i][j][k];
           ndj += ndts[i][j][k];
           if(ndts[i][j][k] > 0)
             ll += lda_lgamma(alpha + ndts[i][j][k]) - lgamma_alpha;
@@ -265,7 +287,8 @@ namespace cirrus{
 
     for(int i=0; i<K_; i++){
       double ni = 0.0;
-      ll -= lda_lgamma(eta * V_ + nt_l[i]);
+      // ll -= lda_lgamma(eta * V_ + nt_l[i]);
+      ll -= lda_lgamma(eta * V_ + global_nt[i]);
       for(int j=0; j<V_; j++){
         // double nij_sum = 0, times = 0;
         // for(int m=0; m<nworkers_; m++){

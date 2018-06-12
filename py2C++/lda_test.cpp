@@ -41,7 +41,7 @@ int main(){
     ","); //,
 
   int K = 20;
-  int nworkers = 5;
+  int nworkers = 10;
 
   auto start = std::chrono::system_clock::now();
   model.reset(new LDAModel(dataset, K, nworkers));
@@ -56,7 +56,7 @@ int main(){
 
   for(int j=0; j<1000; j++){
 
-    auto start_iter = std::chrono::system_clock::now();
+    // auto start_iter = std::chrono::system_clock::now();
 
     std::vector<std::shared_ptr<std::thread>> threads;
     for(int i = 0; i < p; i++){
@@ -70,11 +70,11 @@ int main(){
       t->join();
     }
 
-    end = std::chrono::system_clock::now();
-    diff = end-start_iter;
-    std::cout << j << " : sampling " << diff.count() << " ";
+    // end = std::chrono::system_clock::now();
+    // diff = end-start_iter;
+    // std::cout << j << " : sampling " << diff.count() << " ";
 
-    start_iter = std::chrono::system_clock::now();
+    // start_iter = std::chrono::system_clock::now();
 
     threads.clear();
     for(int i = 0; i < model->nworkers_; i++){
@@ -87,11 +87,11 @@ int main(){
       t->join();
     }
 
-    end = std::chrono::system_clock::now();
-    diff = end-start_iter;
-    std::cout << " syncing " << diff.count() << " ";
+    // end = std::chrono::system_clock::now();
+    // diff = end-start_iter;
+    // std::cout << " syncing " << diff.count() << " ";
 
-    start_iter = std::chrono::system_clock::now();
+    // start_iter = std::chrono::system_clock::now();
     threads.clear();
     for(int i = 0; i < model->nworkers_; i++){
       threads.push_back(std::make_shared<std::thread>(
@@ -103,8 +103,8 @@ int main(){
     }
 
     end = std::chrono::system_clock::now();
-    diff = end-start_iter;
-    std::cout << " updating " << diff.count() << std::endl;
+    // diff = end-start_iter;
+    // std::cout << " updating " << diff.count() << std::endl;
 
     diff = end - start;
     std::cout << j << " : " << model->loglikelihood() << " " << diff.count() <<std::endl;
