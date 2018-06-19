@@ -23,6 +23,7 @@ namespace cirrus{
 
     std::vector<std::vector<std::pair<int, int> > > docs_;
     std::vector<std::string> vocabs_;
+    int sample_size;
   };
 }
 

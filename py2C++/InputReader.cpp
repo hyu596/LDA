@@ -15,7 +15,7 @@
 
 namespace cirrus{
 
-static const int STR_SIZE = 10000;        // max size for dataset line
+static const int STR_SIZE = 100000;        // max size for dataset line
 
 
 LDADataset  InputReader::read_lda_input(
@@ -38,7 +38,7 @@ std::atomic<unsigned int> lines_count(0);
 
 std::vector<std::vector<std::pair<int, int>>> samples;  // final result
 
-uint64_t nthreads = 8;
+uint64_t nthreads = 10;
 std::vector<std::string> vocabs;
 std::vector<std::shared_ptr<std::thread>> threads;
 
@@ -52,7 +52,7 @@ for (uint64_t i = 0; i < nthreads - 1; ++i) {
           std::placeholders::_7, std::placeholders::_8),
         std::ref(fin), std::ref(fin_lock), std::ref(out_lock),
         std::ref(delimiter), std::ref(samples),
-        10000, std::ref(lines_count), // config.get_limit_samples(), std::ref(lines_count),
+        300000, std::ref(lines_count), // config.get_limit_samples(), std::ref(lines_count),
         std::bind(&InputReader::parse_read_lda_input_line, this,
           std::placeholders::_1,
           std::placeholders::_2,
@@ -72,6 +72,15 @@ for (auto& t : threads) {
   t->join();
 }
 
+// parse_read_lda_input_thread(std::ref(fin), std::ref(fin_lock), std::ref(out_lock),
+//         std::ref(delimiter), std::ref(samples),
+//         10000, std::ref(lines_count), // config.get_limit_samples(), std::ref(lines_count),
+//         std::bind(&InputReader::parse_read_lda_input_line, this,
+//           std::placeholders::_1,
+//           std::placeholders::_2,
+//           std::placeholders::_3));
+// read_lda_vocab_input(std::ref(fin_vocab), std::ref(vocabs));
+
 // process each line
 std::cout << "Read a total of " << samples.size() << " samples" << std::endl;
 return LDADataset(std::move(samples), vocabs);
@@ -89,15 +98,20 @@ void InputReader::parse_read_lda_input_thread(std::ifstream& fin,
   std::vector<std::vector<std::pair<int, int>>> samples;
   std::string line;
   uint64_t lines_count_thread = 0;
+
   while(1){
+
       fin_lock.lock();
       getline(fin, line);
       fin_lock.unlock();
 
-      if(fin.eof())
+      if(fin.eof()){
+        // std::cout << "aa\n";
         break;
+      }
 
       if (lines_count && lines_count >= limit_lines){
+        // std::cout << "bb\n";
         break;
       }
 

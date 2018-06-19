@@ -16,35 +16,32 @@
 using namespace cirrus;
 
 std::unique_ptr<LDAModel> model;
-void sample_one_thread(int idx){
-  model->sample(idx);
+void model_sample(int thread_idx){
+  for(int i=0; i<model->nslices; i++){
+    auto updates = model->sample(thread_idx, i);
+    // model->update_slice(i, updates.first);
+    // model->update_nt(updates.second);
+  }
 }
 
-void model_sample(int idx){
-  model->sample(idx);
-}
-
-void model_sync(int idx){
-  model->sync(idx);
-}
-
-void model_update(int idx){
-  model->update(idx);
-}
 
 int main(){
 
   InputReader input;
   LDADataset dataset = input.read_lda_input(
-    "nyt_data.txt",
-    "vocabs_nytimes.txt",
+    "nytimes.txt",
+    "nytimes_vocab.txt",
     ","); //,
 
   int K = 20;
-  int nworkers = 10;
+  int nworkers = 5;
+
+  std::cout << "Finished reading documents\n";
 
   auto start = std::chrono::system_clock::now();
   model.reset(new LDAModel(dataset, K, nworkers));
+
+  std::cout << "Init model\n";
   auto end = std::chrono::system_clock::now();
   std::chrono::duration<double> diff = end-start;
   std::cout << "Init takes: " << diff.count() << std::endl;
@@ -52,12 +49,11 @@ int main(){
   std::cout <<  model->loglikelihood() << " " << model->nworkers_ << " end"  << std::endl;
 
   start = std::chrono::system_clock::now();
-  int p = 1, cur = 0;
+  int p = 1, cur = 0, cur_slice = 0;
+  for(int j=0; j<10000; j++){
 
-  for(int j=0; j<1000; j++){
-
-    // auto start_iter = std::chrono::system_clock::now();
-
+    auto start_iter = std::chrono::system_clock::now();
+    // std::cout << "Start sampling\n";
     std::vector<std::shared_ptr<std::thread>> threads;
     for(int i = 0; i < p; i++){
       threads.push_back(std::make_shared<std::thread>(
@@ -69,46 +65,20 @@ int main(){
     for(auto& t : threads){
       t->join();
     }
-
-    // end = std::chrono::system_clock::now();
-    // diff = end-start_iter;
-    // std::cout << j << " : sampling " << diff.count() << " ";
-
-    // start_iter = std::chrono::system_clock::now();
-
-    threads.clear();
-    for(int i = 0; i < model->nworkers_; i++){
-      // std::cout << "aa" << std::endl;
-      threads.push_back(std::make_shared<std::thread>(
-        model_sync, i
-      ));
-    }
-    for(auto& t : threads){
-      t->join();
-    }
-
-    // end = std::chrono::system_clock::now();
-    // diff = end-start_iter;
-    // std::cout << " syncing " << diff.count() << " ";
-
-    // start_iter = std::chrono::system_clock::now();
-    threads.clear();
-    for(int i = 0; i < model->nworkers_; i++){
-      threads.push_back(std::make_shared<std::thread>(
-        model_update, i
-      ));
-    }
-    for(auto& t : threads){
-      t->join();
-    }
+    // model_sample(cur);
+    // cur = (cur + 1) % model->nworkers_;
 
     end = std::chrono::system_clock::now();
-    // diff = end-start_iter;
-    // std::cout << " updating " << diff.count() << std::endl;
+    diff = end-start_iter;
+    // if(j%100 == 0)
+      std::cout << j << " : sampling " << diff.count() << " " << model->loglikelihood() << std::endl;
 
-    diff = end - start;
-    std::cout << j << " : " << model->loglikelihood() << " " << diff.count() <<std::endl;
+    // for(int i=0; i<model->K_; i++){
+    //   std::cout << model->global_nvt[0][4][i] << " ";
+    // }
+    // std::cout << std::endl;
   }
+  // model->most_frequent_words_all_topics();
 
   std::cout << "Finished.\n";
 

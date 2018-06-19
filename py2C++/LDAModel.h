@@ -7,7 +7,7 @@
 // #include <Model.h>
 // #include <SparseDataset.h>
 #include "LDADataset.h"
-#include "TopicsGenerator.h"
+// #include "TopicsGenerator.h"
 //#include <ModelGradient.h>
 // #include <Configuration.h>
 // #include <map>
@@ -29,33 +29,11 @@ namespace cirrus{
         /**
           * LDA sampling method
           * @param thread_idx
-          *
-          * Given a group index, only allow the selected group to do sampling.
-          * During sampling, changes are applied to the local statistics only
-          * and are saved to change_vt of the selected group.
-          *
-          * Note that the global statistic is not updated yet.
-          */
-        void sample(int thread_idx);
-        /**
-          * LDA sync method
-          * @param thread_idx
-          *
-          * Given a group index, update the global statistic based on
-          * change_vt of the selected group.
-          *
-          * Applied updates would be removed from change_vt.
-          */
-        void sync(int thread_idx);
-        /**
-          * LDA update method
-          * @param thread_idx
-          *
-          * Given a group index, update the statistic of the selected group
-          * based on the global statistic.
+          * @param slice_idx
           *
           */
-        void update(int thread_idx);
+        std::pair<int*, int*> sample(int thread_idx, int slice_idx);
+
         /**
           * LDA loglikelihood method
           *
@@ -66,6 +44,8 @@ namespace cirrus{
           */
         double loglikelihood();
 
+        void most_frequent_words_all_topics();
+
       // private:
 
       /**
@@ -75,34 +55,18 @@ namespace cirrus{
         */
         int K_, V_, D_;
 
-        int nworkers_;
+        // nslices should be determined by the data size but not just use constant 10
+        int nworkers_, nslices;
         double alpha, eta;
 
         std::vector<std::string> vocabs;
+        std::vector<std::vector<int> > slices;
 
-        /**
-          * Given a group index i,
-          *
-          * the related local statistics are:
-          * 1) ts[i]: the assigned topics for each words in the given group
-          * 2) ds[i]: the document indices for ...
-          *           (with which we know which row of ndt to slice)
-          * 3) ws[i]: the global word indices for ...
-          *           (with which we know which row of nvt to slice)
-          * 4) nvts[i]: the word-topic-count statistic of the given group
-          * 5) ndts[i]: the document-topic-count statistic of the given group
-          * 6) nts[i]: the topic-count statistic of the given group
-          * 7) l2gs[i]: with which we find the local word index of the given group
-          *             using global word index
-          *             (TODO should be g2ls)
-          * 8) change_vts[i]: the change of nvts[i] from the sampling
-          */
         std::vector<std::vector<int>> ts, ds, ws;
-        std::vector<std::vector<std::vector<int>>> nvts, ndts;
-        std::vector<std::vector<int>> nts;
-        std::vector<std::map<int, int>> l2gs;
-        std::vector<std::vector<std::pair<std::pair<int, int>, int> > > change_vts;
+        std::vector<std::vector<std::vector<int>>> ndts;
+        std::vector<std::vector<int> > nts;
 
+        std::vector<std::vector<std::pair<std::pair<int, int>, int> > > change_vts;
         std::vector<std::vector<int>> change_nts;
 
         /**
@@ -110,8 +74,7 @@ namespace cirrus{
           * the global word-topic-count statistic
           *
           */
-        std::vector<std::vector<int>> global_nvt;
-
+        std::vector<std::vector<std::vector<int> > > global_nvt;
         std::vector<int> global_nt;
 
         void prepare_thread(LDADataset& dataset,
@@ -119,44 +82,39 @@ namespace cirrus{
                       std::vector<int>& t,
                       std::vector<int>& d,
                       std::vector<int>& w,
-                      std::vector<int>& nt,
-                      std::map<int, int>& l2g,
-                      std::vector<std::vector<int>>& nvt,
                       std::vector<std::vector<int>>& ndt,
-                      std::vector<std::pair<std::pair<int, int>, int> >& change_vt,
-                      // std::map<std::pair<int, int>, int>& change_vt,
-                      TopicsGenerator& generator,
-                      std::mutex& generator_lock,
-                      std::mutex& nvt_lock,
-                      std::mutex& nt_lock);
+                      std::vector<int>& nt);
 
         void prepare_partial_docs(const std::vector<std::vector<std::pair<int, int>>>& docs,
                       std::vector<int>& t,
-                      std::vector<int>& nt,
                       std::vector<int>& d,
                       std::vector<int>& w,
-                      std::map<int, int>& l2g,
-                      std::vector<std::vector<int>>& nvt,
                       std::vector<std::vector<int>>& ndt,
-                      std::vector<std::pair<std::pair<int, int>, int> >& change_vt,
-                      // std::map<std::pair<int, int>, int>& change_vt,
-                      TopicsGenerator& generator,
-                      std::mutex& generator_lock,
-                      std::mutex& nvt_lock,
-                      std::mutex& nt_lock
+                      std::vector<int>& nt,
+                      int* change_nvt,
+                      int* change_nt,
+                      int lower, int upper
                     );
 
-        void sample_thread(std::vector<int>& t,
-                        std::vector<int>& d,
-                        std::vector<int>& w,
-                        std::map<int, int>& l2g,
-                        std::vector<int>& nt,
-                        std::vector<std::vector<int>>& nvt,
-                        std::vector<std::vector<int>>& ndt,
-                        std::vector<std::pair<std::pair<int, int>, int> >& change_vt,
-                        std::vector<int>& change_nt
-                        // std::map<std::pair<int, int>, int>& change_vt
-                      );
+        /**
+          * update the slice_idx^th global_nvt based on change_nvt
+          */
+        void update_slice(int slice_idx, int* change_nvt);
+        /**
+          * update global_nt based on change_nt
+          */
+        void update_nt(int* change_nt);
+
+        std::pair<int*, int*> sample_thread(std::vector<int>& t,
+                                    std::vector<int>& d,
+                                    std::vector<int>& w,
+                                    std::vector<int>& nt,
+                                    std::vector<std::vector<int>>& nvt,
+                                    std::vector<std::vector<int>>& ndt,
+                                    int lower, int upper
+                                    );
+
+
     };
 }
 

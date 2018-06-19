@@ -11,6 +11,7 @@ namespace cirrus{
                std::vector<std::string> vocabs){
                 docs_ = docs;
                 vocabs_ = vocabs;
+                sample_size = (docs_.size())/100;
                }
 
   uint64_t LDADataset::num_docs() const{
@@ -33,12 +34,12 @@ namespace cirrus{
 
 
   void LDADataset::get_some_docs(std::vector<std::vector<std::pair<int, int> > >& docs){
-    if(docs_.size() > 100)
-      docs.resize(100);
+    if(docs_.size() > sample_size)
+      docs.resize(sample_size);
     else
       docs.resize(docs_.size());
-    std::copy(docs_.begin(), docs_.size() > 100 ? docs_.begin() + 100 : docs_.end(), docs.begin());
-    docs_.erase(docs_.begin(), docs_.size() > 100 ? docs_.begin() + 100 : docs_.end());
+    std::copy(docs_.begin(), docs_.size() > sample_size ? docs_.begin() + sample_size : docs_.end(), docs.begin());
+    docs_.erase(docs_.begin(), docs_.size() > sample_size ? docs_.begin() + sample_size : docs_.end());
   }
 
 }
